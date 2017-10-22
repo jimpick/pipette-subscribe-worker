@@ -47,10 +47,47 @@ function subscribeToDat (key) {
   return promise
 }
 
+function networkTools (dat) {
+  const { network } = dat
+  network.on('connection', (connection, info) => {
+    console.log('network onConnection', info.host)
+  })
+  network.on('peer', peer => {
+    console.log('network peer', peer)
+  })
+  network.on('drop', peer => {
+    console.log('network drop', peer)
+  })
+  network.on('error', error => {
+    console.log('network error', error)
+  })
+  setInterval(() => {
+    const { connected, connecting, queued } = network
+    console.log('Network:', connected, connecting, queued)
+  }, 5000)
+}
+
+function datStatus (dat) {
+  const stats = dat.trackStats()
+  stats.on('update', () => {
+    const st = stats.get()
+    console.log('Stats update:', st)
+  })
+  setInterval(() => {
+    console.log('Stats network:', stats.network.downloadSpeed,
+      stats.network.uploadSpeed)
+    console.log('Stats peers:', stats.peers.total, stats.peers.complete)
+  }, 5000)
+}
+
 async function run ({ sourceDatUrl, subscribe, share }) {
+  console.log('Source Url:', sourceDatUrl)
   const key = await datDns.resolveName(sourceDatUrl)
+  console.log('Source Key:', key)
   const dat = await subscribeToDat(key)
-  console.log('Jim', dat)
+  // networkTools(dat)
+  datStatus(dat)
+  // console.log('Jim', dat)
 }
 
 run({
