@@ -159,7 +159,8 @@ function watchForUpdates (archive) {
     if (archive.version > lastUpdateVersion) {
       console.log('Update notice received, queuing job', archive.version)
 
-      const genBuildJob = version => () => doFakeBuild(version)
+      // const genBuildJob = version => () => doFakeBuild(version)
+      const genBuildJob = version => () => doBuild(archive, version)
       jobQueue.add(genBuildJob(archive.version))
       lastUpdateVersion = archive.version
     }
@@ -185,20 +186,47 @@ function watchForUpdates (archive) {
   setTimeout(queueJob, 12000)
 }
 
-function doFakeBuild (version) {
+function countdown (version, seconds) {
   const promise = new Promise((resolve, reject) => {
-    console.log('Building version', version)
     let counter = 0
     const intervalId = setInterval(() => {
-      console.log('Counter', version, ++counter)
-      if (counter >= 30) {
-        console.log('Built version', version)
+      console.log('  Counter', version, ++counter)
+      if (counter >= seconds) {
         clearInterval(intervalId)
         resolve()
       }
     }, 1000)
+
   })
   return promise
+}
+
+async function doFakeBuild (version) {
+  console.log('Building version', version)
+  await countdown(version, 30)
+  console.log('Built version', version)
+}
+
+function downloadVersion(archive, version) {
+  const promise = new Promise((resolve, reject) => {
+    console.log('  Downloading')
+    archive.checkout(version).download(error => {
+      if (error) {
+        console.error('Download error', error)
+        return reject(error)
+      }
+      console.log('  Downloaded')
+      resolve()
+    })
+  })
+  return promise
+}
+
+async function doBuild (archive, version) {
+  console.log('Building version', version)
+  await downloadVersion(archive, version)
+  await countdown(version, 30)
+  console.log('Built version', version)
 }
 
 async function run ({ sourceDatUrl, subscribe, share }) {
