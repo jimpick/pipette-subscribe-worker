@@ -2,7 +2,8 @@ const Dat = require('dat-node')
 const datDns = require('dat-dns')()
 const minimist = require('minimist')
 const mkdirp = require('mkdirp')
-const { throttle } = require('lodash')
+const { throttle, debounce } = require('lodash')
+const PQueue = require('p-queue')
 
 const argv = minimist(process.argv.slice(2), {
   alias: {
@@ -37,7 +38,7 @@ function subscribeToDat (key) {
   const promise = new Promise((resolve, reject) => {
     const sourceDir = `data/${key}/source`
     mkdirp.sync(sourceDir)
-    Dat(sourceDir, { key }, (error, dat) => {
+    Dat(sourceDir, { key, sparse: true }, (error, dat) => {
       if (error) {
         return reject(error)
       }
@@ -130,6 +131,76 @@ function archiveTools (archive) {
   })
 }
 
+let lastSyncedVersion = 0
+
+function watchForNewSyncedVersions (archive) {
+  archive.on('sync', () => {
+    if (archive.version > lastSyncedVersion) {
+      console.log('New version synced', archive.version)
+      lastSyncedVersion = archive.version
+    }
+  })
+}
+
+function watchHistoryStream (archive) {
+  const stream = archive.history()
+  stream.on('data', data => {
+    console.log('History:', data)
+  })
+}
+
+let lastUpdateVersion = 0
+
+const jobQueue = new PQueue({concurrency: 1})
+const debounceDelay = 5
+
+function watchForUpdates (archive) {
+  const queueJob = debounce(() => {
+    if (archive.version > lastUpdateVersion) {
+      console.log('Update notice received, queuing job', archive.version)
+
+      const genBuildJob = version => () => doFakeBuild(version)
+      jobQueue.add(genBuildJob(archive.version))
+      lastUpdateVersion = archive.version
+    }
+  }, debounceDelay * 1000)
+  archive.on('update', () => {
+    console.log(
+      'Update notice recieved ... ' +
+      `debouncing (${debounceDelay} seconds)`
+    )
+    queueJob()
+  })
+  // On first run, if there is no immediate update, and there is
+  // a version in the already synced dat archive, use that after
+  // a timeout (to allow a chance for a new version to sync)
+  setTimeout(() => {
+    if (!lastUpdateVersion) {
+      console.log(
+        'No updated version discovered via network yet, ' +
+        'delaying 10 seconds to wait for possible updates'
+      )
+    }
+  }, 2000)
+  setTimeout(queueJob, 12000)
+}
+
+function doFakeBuild (version) {
+  const promise = new Promise((resolve, reject) => {
+    console.log('Building version', version)
+    let counter = 0
+    const intervalId = setInterval(() => {
+      console.log('Counter', version, ++counter)
+      if (counter >= 30) {
+        console.log('Built version', version)
+        clearInterval(intervalId)
+        resolve()
+      }
+    }, 1000)
+  })
+  return promise
+}
+
 async function run ({ sourceDatUrl, subscribe, share }) {
   console.log('Source Url:', sourceDatUrl)
   const key = await datDns.resolveName(sourceDatUrl)
@@ -138,7 +209,10 @@ async function run ({ sourceDatUrl, subscribe, share }) {
   // networkTools(dat)
   datStatus(dat)
   const { archive } = dat
-  archiveTools(archive)
+  // archiveTools(archive)
+  watchForNewSyncedVersions(archive)
+  // watchHistoryStream(archive)
+  watchForUpdates(archive)
   // console.log('Jim', dat)
 }
 
