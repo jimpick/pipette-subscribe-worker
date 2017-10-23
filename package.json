@@ -1,12 +1,12 @@
 {
-  "name": "follow-netlify-cms",
-  "version": "1.0.0",
-  "description": "",
+  "name": "dat-subscribe-worker",
+  "version": "0.0.1",
+  "description": "Follows a Dat archive and kicks off a worker for each revision",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "author": "",
+  "author": "Jim Pick - @jimpick",
   "license": "ISC",
   "dependencies": {
     "dat-dns": "^1.3.2",

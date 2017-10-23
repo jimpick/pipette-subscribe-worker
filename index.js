@@ -1,9 +1,12 @@
+const path = require('path')
 const Dat = require('dat-node')
 const datDns = require('dat-dns')()
 const minimist = require('minimist')
 const mkdirp = require('mkdirp')
 const { throttle, debounce } = require('lodash')
 const PQueue = require('p-queue')
+const ram = require('random-access-memory')
+const mirror = require('mirror-folder')
 
 const argv = minimist(process.argv.slice(2), {
   alias: {
@@ -36,9 +39,7 @@ console.log(sourceDatUrl, argv.subscribe, argv['dat-share'])
 
 function subscribeToDat (key) {
   const promise = new Promise((resolve, reject) => {
-    const sourceDir = `data/${key}/source`
-    mkdirp.sync(sourceDir)
-    Dat(sourceDir, { key, sparse: true }, (error, dat) => {
+    Dat(ram, { key, sparse: true }, (error, dat) => {
       if (error) {
         return reject(error)
       }
@@ -209,14 +210,27 @@ async function doFakeBuild (version) {
 
 function downloadVersion(archive, version) {
   const promise = new Promise((resolve, reject) => {
+    const key = archive.key.toString('hex')
+    const sourceDir = `data/${key}/source`
+    const opts = {
+      fs: archive.checkout(version),
+      name: '/'
+    }
     console.log('  Downloading')
-    archive.checkout(version).download(error => {
+    const progress = mirror(opts, sourceDir, function (error) {
       if (error) {
         console.error('Download error', error)
         return reject(error)
       }
       console.log('  Downloaded')
       resolve()
+    })
+    progress.on('put', function (src) {
+      console.log('    Add', src.name.slice(1))
+    })
+    progress.on('del', function (src) {
+      const name = path.relative(sourceDir, src.name)
+      console.log('    Delete', name)
     })
   })
   return promise
@@ -233,6 +247,8 @@ async function run ({ sourceDatUrl, subscribe, share }) {
   console.log('Source Url:', sourceDatUrl)
   const key = await datDns.resolveName(sourceDatUrl)
   console.log('Source Key:', key)
+  const sourceDir = `data/${key}/source`
+  mkdirp.sync(sourceDir)
   const dat = await subscribeToDat(key)
   // networkTools(dat)
   datStatus(dat)
