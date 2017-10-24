@@ -1,6 +1,12 @@
 const path = require('path')
 const { spawn } = require('child_process')
-const { unlinkSync, symlinkSync } = require('fs')
+const {
+  unlinkSync,
+  symlinkSync,
+  readFileSync,
+  writeFileSync,
+  existsSync
+} = require('fs')
 const Dat = require('dat-node')
 const datDns = require('dat-dns')()
 const minimist = require('minimist')
@@ -155,12 +161,18 @@ function watchHistoryStream (archive) {
   })
 }
 
-let lastUpdateVersion = 0
-
-const jobQueue = new PQueue({concurrency: 1})
-const debounceDelay = 5
-
 function watchForUpdates (archive) {
+  let lastUpdateVersion = 0
+  const key = archive.key.toString('hex')
+  const lastBuilt = `${dataDir}/${key}/last-built`
+  if (existsSync(lastBuilt)) {
+    lastUpdateVersion = parseInt(readFileSync(lastBuilt, 'utf8'), 10)
+    console.log('Last built version:', lastUpdateVersion)
+  }
+
+  const jobQueue = new PQueue({concurrency: 1})
+  const debounceDelay = 5
+
   const queueJob = debounce(() => {
     if (archive.version > lastUpdateVersion) {
       console.log('Update notice received, queuing job', archive.version)
@@ -279,15 +291,18 @@ async function doBuild (archive, version) {
   await downloadVersion(archive, version)
 
   const key = archive.key.toString('hex')
+  const lastBuilt = `${dataDir}/${key}/last-built`
   const sourceDir = `${dataDir}/${key}/source`
   const siteDatSymlink = '/home/worker/hyde-cms-theme/site/dat'
   await del(siteDatSymlink, { force: true })
   symlinkSync(sourceDir, siteDatSymlink)
 
   const distSymlink = '/home/worker/hyde-cms-theme/dist'
-  const staticSiteDir = `${dataDir}/${key}/static-site`
+  const dataKeyDir = `${dataDir}/${key}`
+  const staticSiteDir = `${dataKeyDir}/static-site`
   await del(distSymlink, { force: true })
   mkdirp.sync(staticSiteDir)
+  await del(lastBuilt, { force: true })
   await del(
     [
       `${staticSiteDir}/*`,
@@ -300,6 +315,8 @@ async function doBuild (archive, version) {
   symlinkSync(staticSiteDir, distSymlink)
 
   await runHugo()
+
+  writeFileSync(lastBuilt, `${version}\n`)
 
   console.log('Built version', version)
 }
