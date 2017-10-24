@@ -1,4 +1,6 @@
 const path = require('path')
+const { spawn } = require('child_process')
+const { unlinkSync, symlinkSync } = require('fs')
 const Dat = require('dat-node')
 const datDns = require('dat-dns')()
 const minimist = require('minimist')
@@ -7,6 +9,9 @@ const { throttle, debounce } = require('lodash')
 const PQueue = require('p-queue')
 const ram = require('random-access-memory')
 const mirror = require('mirror-folder')
+const del = require('del')
+
+const dataDir = '/mnt/data'
 
 const argv = minimist(process.argv.slice(2), {
   alias: {
@@ -211,7 +216,7 @@ async function doFakeBuild (version) {
 function downloadVersion(archive, version) {
   const promise = new Promise((resolve, reject) => {
     const key = archive.key.toString('hex')
-    const sourceDir = `data/${key}/source`
+    const sourceDir = `${dataDir}/${key}/source`
     const opts = {
       fs: archive.checkout(version),
       name: '/'
@@ -236,10 +241,66 @@ function downloadVersion(archive, version) {
   return promise
 }
 
+function runHugo () {
+  const promise = new Promise((resolve, reject) => {
+    const command = 'npm'
+    const args = [
+      'run',
+      'build'
+    ]
+    const options = {
+      cwd: '/home/worker/hyde-cms-theme'
+    }
+    console.log('  Running command:', command, args.join(' '))
+    const hugo = spawn(
+      command,
+      args,
+      options
+    )
+    hugo.stdout.on('data', data => {
+      process.stdout.write('  ')
+      process.stdout.write(data)
+    })
+    hugo.stderr.on('data', data => {
+      process.stdout.write('  ')
+      process.stdout.write(data)
+    })
+    hugo.on('close', code => {
+      console.log(`  Build subprocess exited with code ${code}`)
+      resolve()
+    })
+  })
+  return promise
+}
+
 async function doBuild (archive, version) {
   console.log('Building version', version)
+
   await downloadVersion(archive, version)
-  await countdown(version, 30)
+
+  const key = archive.key.toString('hex')
+  const sourceDir = `${dataDir}/${key}/source`
+  const siteDatSymlink = '/home/worker/hyde-cms-theme/site/dat'
+  await del(siteDatSymlink, { force: true })
+  symlinkSync(sourceDir, siteDatSymlink)
+
+  const distSymlink = '/home/worker/hyde-cms-theme/dist'
+  const staticSiteDir = `${dataDir}/${key}/static-site`
+  await del(distSymlink, { force: true })
+  mkdirp.sync(staticSiteDir)
+  await del(
+    [
+      `${staticSiteDir}/*`,
+      `${staticSiteDir}/.*`,
+      `!${staticSiteDir}/.dat`
+    ],
+    { force: true }
+  )
+  mkdirp.sync(staticSiteDir)
+  symlinkSync(staticSiteDir, distSymlink)
+
+  await runHugo()
+
   console.log('Built version', version)
 }
 
@@ -247,7 +308,7 @@ async function run ({ sourceDatUrl, subscribe, share }) {
   console.log('Source Url:', sourceDatUrl)
   const key = await datDns.resolveName(sourceDatUrl)
   console.log('Source Key:', key)
-  const sourceDir = `data/${key}/source`
+  const sourceDir = `${dataDir}/${key}/source`
   mkdirp.sync(sourceDir)
   const dat = await subscribeToDat(key)
   // networkTools(dat)
