@@ -321,7 +321,20 @@ async function doBuild (archive, version) {
   console.log('Built version', version)
 }
 
+function setupDatSecretKeysSymlink () {
+  const dotDatDir = `${process.env.HOME}/.dat`
+  mkdirp.sync(dotDatDir)
+  const secretKeysDir = `${dataDir}/secret_keys`
+  mkdirp.sync(secretKeysDir)
+  const secretKeysSymlink = `${dotDatDir}/secret_keys`
+  if (!existsSync(secretKeysSymlink)) {
+    del.sync(secretKeysSymlink)
+    symlinkSync(secretKeysDir, secretKeysSymlink)
+  }
+}
+
 async function run ({ sourceDatUrl, subscribe, share }) {
+  setupDatSecretKeysSymlink()
   console.log('Source Url:', sourceDatUrl)
   const key = await datDns.resolveName(sourceDatUrl)
   console.log('Source Key:', key)
