@@ -168,6 +168,11 @@ function watchForUpdates (archive) {
   if (existsSync(lastBuilt)) {
     lastUpdateVersion = parseInt(readFileSync(lastBuilt, 'utf8'), 10)
     console.log('Last built version:', lastUpdateVersion)
+    const dataKeyDir = `${dataDir}/${key}`
+    const staticSiteDir = `${dataKeyDir}/static-site`
+    if (existsSync(staticSiteDir)) {
+      share(staticSiteDir)
+    }
   }
 
   const jobQueue = new PQueue({concurrency: 1})
@@ -319,6 +324,7 @@ async function doBuild (archive, version) {
   writeFileSync(lastBuilt, `${version}\n`)
 
   console.log('Built version', version)
+  publish(staticSiteDir)
 }
 
 function setupDatSecretKeysSymlink () {
@@ -331,6 +337,60 @@ function setupDatSecretKeysSymlink () {
     del.sync(secretKeysSymlink)
     symlinkSync(secretKeysDir, secretKeysSymlink)
   }
+}
+
+let staticSiteDat = null
+
+function createStaticSiteDat (staticSiteDir) {
+  const promise = new Promise((resolve, reject) => {
+    Dat(staticSiteDir, (error, dat) => {
+      if (error) {
+        console.error('Error', error)
+        return reject(error)
+      }
+      dat.joinNetwork(error => {
+        if (error) {
+          console.error('joinNetwork error (Static Site)', error)
+          throw err
+        }
+        console.log('Network joined (Static Site)')
+      })
+      resolve(dat)
+    })
+  })
+  return promise
+}
+
+async function share (staticSiteDir) {
+  console.log('Sharing Static Site', staticSiteDir)
+  if (!staticSiteDat) {
+    staticSiteDat = await createStaticSiteDat(staticSiteDir)
+  }
+  console.log('Static site key:', staticSiteDat.key.toString('hex'))
+}
+
+async function publish (staticSiteDir) {
+  await share(staticSiteDir)
+  /*
+  const destOpts = {
+    fs: staticSiteDat.archive,
+    name: '/'
+  }
+  const progress = mirror(staticSiteDir, destOpts, function (error) {
+    if (error) {
+      console.error('Publish error', error)
+      throw error
+    }
+    console.log('Published version', staticSiteDat.version)
+  })
+  */
+  staticSiteDat.importFiles(error => {
+    if (error) {
+      console.error('Publish error', error)
+      throw error
+    }
+    console.log('Published version', staticSiteDat.version)
+  })
 }
 
 async function run ({ sourceDatUrl, subscribe, share }) {
