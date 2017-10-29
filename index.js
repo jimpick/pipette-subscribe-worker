@@ -384,7 +384,18 @@ async function publish (staticSiteDir) {
     console.log('Published version', staticSiteDat.version)
   })
   */
-  staticSiteDat.importFiles(error => {
+  const opts = {
+    equals: (src, dest, cb) => {
+      // Hugo regenerates the files each time, so we ignore mtime
+      const equals = (
+        src.stat.isDirectory() ||
+        src.stat.size === dest.stat.size
+      )
+      cb(null, equals)
+    },
+    ignoreDirs: false // Needed to make mirror-folder delete things
+  }
+  const importer = staticSiteDat.importFiles(opts, error => {
     if (error) {
       console.error('Publish error', error)
       throw error
@@ -408,7 +419,6 @@ async function run ({ sourceDatUrl, subscribe, share }) {
   watchForNewSyncedVersions(archive)
   // watchHistoryStream(archive)
   watchForUpdates(archive)
-  // console.log('Jim', dat)
 }
 
 run({
