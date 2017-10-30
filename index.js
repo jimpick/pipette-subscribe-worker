@@ -383,7 +383,7 @@ async function share (staticSiteDir) {
   if (!staticSiteDat) {
     staticSiteDat = await createStaticSiteDat(staticSiteDir)
   }
-  console.log(`Static site url: dat:/${staticSiteDat.key.toString('hex')}/`)
+  console.log(`Static site url: dat://${staticSiteDat.key.toString('hex')}/`)
 }
 
 async function publish (staticSiteDir) {
