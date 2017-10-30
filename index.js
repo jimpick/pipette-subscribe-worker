@@ -177,9 +177,13 @@ function watchForUpdates (archive) {
 
   const jobQueue = new PQueue({concurrency: 1})
   const debounceDelay = 5
+  let timeoutId
 
   const queueJob = debounce(() => {
     if (archive.version > lastUpdateVersion) {
+      if (timeoutId) {
+        clearTimeout(timeoutId)
+      }
       console.log('Update notice received, queuing job', archive.version)
 
       // const genBuildJob = version => () => doFakeBuild(version)
@@ -206,7 +210,13 @@ function watchForUpdates (archive) {
       )
     }
   }, 2000)
-  setTimeout(queueJob, 12000)
+  timeoutId = setTimeout(() => {
+    if (!argv.subscribe && archive.version <= lastUpdateVersion) {
+      console.log('No update found, exiting.')
+      process.exit(0)
+    }
+    queueJob()
+  }, 12000)
 }
 
 function countdown (version, seconds) {
@@ -324,6 +334,10 @@ async function doBuild (archive, version) {
   writeFileSync(lastBuilt, `${version}\n`)
 
   console.log('Built version', version)
+  if (!argv.subscribe) {
+    console.log('Exiting')
+    process.exit(0)
+  }
   publish(staticSiteDir)
 }
 
@@ -362,14 +376,20 @@ function createStaticSiteDat (staticSiteDir) {
 }
 
 async function share (staticSiteDir) {
+  if (!argv['dat-share']) {
+    return
+  }
   console.log('Sharing Static Site', staticSiteDir)
   if (!staticSiteDat) {
     staticSiteDat = await createStaticSiteDat(staticSiteDir)
   }
-  console.log('Static site key:', staticSiteDat.key.toString('hex'))
+  console.log(`Static site url: dat:/${staticSiteDat.key.toString('hex')}/`)
 }
 
 async function publish (staticSiteDir) {
+  if (!argv['dat-share']) {
+    return
+  }
   await share(staticSiteDir)
   /*
   const destOpts = {
