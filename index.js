@@ -194,7 +194,7 @@ function watchForUpdates (archive) {
   }, debounceDelay * 1000)
   archive.on('update', () => {
     console.log(
-      'Update notice recieved ... ' +
+      'Update notice received ... ' +
       `debouncing (${debounceDelay} seconds)`
     )
     queueJob()
