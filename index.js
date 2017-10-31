@@ -194,7 +194,7 @@ function watchForUpdates (archive) {
   }, debounceDelay * 1000)
   archive.on('update', () => {
     console.log(
-      'Update notice received ... ' +
+      'Update notice recieved ... ' +
       `debouncing (${debounceDelay} seconds)`
     )
     queueJob()
@@ -269,6 +269,24 @@ function downloadVersion(archive, version) {
 }
 
 function runHugo () {
+  const settingsFile = '/home/worker/hyde-cms-theme/site/dat/settings.json'
+  const settings = JSON.parse(readFileSync(settingsFile, 'utf8'))
+  del.sync('/home/worker/hyde-cms-theme/site/config.toml', { force: true })
+  config = {
+    baseurl: '/',
+    languageCode: 'en-us',
+    title: settings.title,
+    theme: 'hyde',
+    params: {
+      themeColor: settings.themeColor,
+      description: settings.description
+    }
+  }
+  writeFileSync(
+    '/home/worker/hyde-cms-theme/site/config.json',
+    JSON.stringify(config, null, 2)
+  )
+
   const promise = new Promise((resolve, reject) => {
     const command = 'npm'
     const args = [
